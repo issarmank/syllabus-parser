@@ -36,18 +36,23 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
-      <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-lg">
-        <h1 className="text-2xl font-bold mb-4 text-center text-gray-800">
+    <div className="w-screen h-[100dvh] bg-white overflow-x-hidden">
+      <div className="mx-auto max-w-2xl p-8 mt-60">
+        <h1 className="text-6xl font-bold mb-4 text-center text-gray-800">
           📚 Syllabus Parser
         </h1>
 
-        <input
-          type="file"
-          accept=".pdf"
-          onChange={handleFileChange}
-          className="block w-full text-sm text-gray-700 mb-4"
-        />
+        <div className="w-122 text-right mb-4">
+          <input
+            type="file"
+            accept=".pdf"
+            onChange={handleFileChange}
+            className="inline-block text-sm text-gray-900
+                       file:mr-4 file:rounded-lg file:border-0
+                       file:bg-gray-600 file:text-white file:px-4 file:py-2
+                       hover:file:bg-gray-900"
+          />
+        </div>
 
         <button
           onClick={handleUpload}
