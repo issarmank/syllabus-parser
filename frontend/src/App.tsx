@@ -6,6 +6,7 @@ function App() {
   const [file, setFile] = useState<File | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState("");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] ?? null;
@@ -26,6 +27,7 @@ function App() {
       });
 
       const data = await response.json();
+      setSummary(data.summary || "");
       setEvents(data.events || []);
     } catch (error) {
       console.error("Upload error:", error);
@@ -61,6 +63,13 @@ function App() {
         >
           {loading ? "Parsing..." : "Upload & Parse"}
         </button>
+
+        {summary && (
+          <div className="mt-8 p-4 rounded-xl bg-gray-50 border">
+            <h2 className="text-xl font-semibold mb-2">📄 Summary</h2>
+            <p className="text-gray-700 leading-relaxed">{summary}</p>
+          </div>
+        )}
 
         {events.length > 0 && (
           <div className="mt-6">
