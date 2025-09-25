@@ -66,22 +66,22 @@ function App() {
 
         {summary && (
           <div className="mt-8 p-4 rounded-xl bg-gray-50 border">
-            <h2 className="text-xl font-semibold mb-2">📄 Summary</h2>
-            <p className="text-gray-700 leading-relaxed">{summary}</p>
+            <h2 className="text-xl text-black font-semibold mb-2">📄 Summary</h2>
+            <p className="text-black leading-relaxed">{summary}</p>
           </div>
         )}
 
         {events.length > 0 && (
           <div className="mt-6">
-            <h2 className="text-xl font-semibold mb-2">📅 Detected Events</h2>
+            <h2 className="text-xl text-black font-semibold mb-2">📅 Detected Events</h2>
             <ul className="space-y-3">
               {events.map((ev, idx) => (
                 <li
                   key={idx}
-                  className="p-3 border rounded-lg bg-gray-100 flex justify-between"
+                  className="p-3 border rounded-lg bg-gray-100 text-black flex justify-between"
                 >
                   <span>{ev.title}</span>
-                  <span className="text-blue-600 font-medium">{ev.date}</span>
+                  <span className="text-black font-medium">{ev.date}</span>
                 </li>
               ))}
             </ul>
