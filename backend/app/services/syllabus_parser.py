@@ -1,5 +1,6 @@
 # app/services/syllabus_parser.py
 import json, re
+import logging
 from openai import OpenAI
 from app.config import OPENAI_API_KEY
 from app.models import Event, ParseResult
@@ -16,6 +17,8 @@ SYSTEM = (
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+logger = logging.getLogger(__name__)
+
 def heuristic(text: str) -> ParseResult:
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     summary = " ".join(lines[:5])[:400]
@@ -28,25 +31,23 @@ def heuristic(text: str) -> ParseResult:
             break
     return ParseResult(summary=summary, events=events)
 
-def parse_pdf_bytes(data: bytes, max_pages: int = 12) -> ParseResult:
-    text = extract_text_from_pdf(data, max_pages=max_pages)
+def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
+    text = extract_text_from_pdf(pdf_bytes, max_pages=max_pages)
+    if not text.strip():
+        return ParseResult(summary="No text extracted.", events=[])
     if not OPENAI_API_KEY:
         return heuristic(text)
-
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    truncated = text[:30000]
-
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": truncated},
-        ],
-    )
-    raw = resp.choices[0].message.content or "{}"
     try:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",   # keep or change; temperature removed
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": text[:30000]},
+            ],
+        )
+        raw = resp.choices[0].message.content or "{}"
         data = json.loads(raw)
         summary = (data.get("summary") or "").strip()
         events_out: list[Event] = []
@@ -57,6 +58,9 @@ def parse_pdf_bytes(data: bytes, max_pages: int = 12) -> ParseResult:
                 continue
             if title:
                 events_out.append(Event(title=title, date=date))
-        return ParseResult(summary=summary, events=events_out)
-    except Exception:
-        return heuristic(text)
+        return ParseResult(summary=summary or "No summary returned.", events=events_out)
+    except Exception as e:
+        logger.exception("OpenAI call failed")
+        fb = heuristic(text)
+        fb.summary = f"(Fallback due to OpenAI error: {e})\n{fb.summary}"
+        return fb

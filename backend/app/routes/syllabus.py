@@ -1,6 +1,5 @@
 # app/routes/syllabus.py
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.services.pdf_reader import extract_text_from_pdf
 from app.services.syllabus_parser import parse_pdf_bytes
 from app.models import ParseResult
 
