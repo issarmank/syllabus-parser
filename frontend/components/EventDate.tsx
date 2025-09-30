@@ -1,40 +1,30 @@
-import React from "react";
 
-interface Props {
-  date?: string | null;
-  className?: string;
-}
-
-function formatDate(iso?: string | null): string {
+function formatFullDate(iso?: string): string {
   if (!iso) return "No date";
   const parts = iso.split("-");
-  if (parts.length !== 3) return iso; // leave unknown format as-is
-  const [y, m, d] = parts.map(Number);
-  const dt = new Date(y, (m || 1) - 1, d || 1);
-  if (isNaN(dt.getTime())) return iso;
-  return dt.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  if (parts.length !== 3) return iso; // leave unknown format
+  const [yStr, mStr, dStr] = parts;
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const d = Number(dStr);
+  if (!y || !m || !d) return iso;
+
+  const monthNames = [
+    "January","February","March","April","May","June",
+    "July","August","September","October","November","December"
+  ];
+  const month = monthNames[m - 1] ?? mStr;
+
+  const ordinal = (n: number) => {
+    const rem10 = n % 10;
+    const rem100 = n % 100;
+    if (rem10 === 1 && rem100 !== 11) return `${n}st`;
+    if (rem10 === 2 && rem100 !== 12) return `${n}nd`;
+    if (rem10 === 3 && rem100 !== 13) return `${n}rd`;
+    return `${n}th`;
+  };
+
+  return `${month} ${ordinal(d)}, ${y}`;
 }
 
-export const EventDate: React.FC<Props> = ({ date, className = "" }) => {
-  const formatted = formatDate(date);
-  const missing = !date;
-  return (
-    <span
-      className={
-        "inline-block px-2 py-0.5 rounded text-xs font-medium " +
-        (missing
-          ? "bg-gray-200 text-gray-600"
-          : "bg-indigo-50 text-indigo-700 border border-indigo-200") +
-        " " +
-        className
-      }
-      title={date || "No ISO date provided"}
-    >
-      {formatted}
-    </span>
-  );
-};
+export default formatFullDate;

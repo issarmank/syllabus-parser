@@ -1,36 +1,8 @@
 import React, { useState } from "react";
+import formatFullDate from "../components/EventDate";
+import { downloadICS, downloadCSV } from "./utils/exportCalendar";
 
 type EventItem = { title: string; date: string };
-
-// --- added utility ---
-function formatFullDate(iso?: string): string {
-  if (!iso) return "No date";
-  const parts = iso.split("-");
-  if (parts.length !== 3) return iso; // leave unknown format
-  const [yStr, mStr, dStr] = parts;
-  const y = Number(yStr);
-  const m = Number(mStr);
-  const d = Number(dStr);
-  if (!y || !m || !d) return iso;
-
-  const monthNames = [
-    "January","February","March","April","May","June",
-    "July","August","September","October","November","December"
-  ];
-  const month = monthNames[m - 1] ?? mStr;
-
-  const ordinal = (n: number) => {
-    const rem10 = n % 10;
-    const rem100 = n % 100;
-    if (rem10 === 1 && rem100 !== 11) return `${n}st`;
-    if (rem10 === 2 && rem100 !== 12) return `${n}nd`;
-    if (rem10 === 3 && rem100 !== 13) return `${n}rd`;
-    return `${n}th`;
-  };
-
-  return `${month} ${ordinal(d)}, ${y}`;
-}
-// --- end utility ---
 
 function App() {
   const [file, setFile] = useState<File | null>(null);
@@ -67,6 +39,16 @@ function App() {
     }
   };
 
+  const handleDownloadICS = () => {
+    if (!events.length) return;
+    downloadICS(events);
+  };
+
+  const handleDownloadCSV = () => {
+    if (!events.length) return;
+    downloadCSV(events);
+  };
+
   return (
     <div className="w-screen h-[100dvh] bg-white overflow-x-hidden">
       <div className="mx-auto max-w-2xl p-8 mt-60">
@@ -93,6 +75,23 @@ function App() {
         >
           {loading ? "Parsing..." : "Upload & Parse"}
         </button>
+
+        {events.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              onClick={handleDownloadICS}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+            >
+              Download .ics
+            </button>
+            <button
+              onClick={handleDownloadCSV}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
+            >
+              Export CSV (Notion)
+            </button>
+          </div>
+        )}
 
         {summary && (
           <div className="mt-8 p-4 rounded-xl bg-gray-50 border">
