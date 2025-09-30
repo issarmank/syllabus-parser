@@ -1,14 +1,15 @@
 import React, { useState } from "react";
-import formatFullDate from "../components/EventDate";
+import formatFullDate from "./components/EventDate";
 import { downloadICS, downloadCSV } from "./utils/exportCalendar";
-
-type EventItem = { title: string; date: string };
+import type { EventItem, EvaluationItem, ParseResult } from "./utils/types";
+import { EvaluationsTable } from "./components/EvaluationsTable";
 
 function App() {
   const [file, setFile] = useState<File | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState("");
+  const [evaluations, setEvaluations] = useState<EvaluationItem[]>([]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] ?? null;
@@ -28,9 +29,10 @@ function App() {
         body: formData,
       });
 
-      const data = await response.json();
+      const data: ParseResult = await response.json();
       setSummary(data.summary || "");
       setEvents(data.events || []);
+      setEvaluations(data.evaluations || []);
     } catch (error) {
       console.error("Upload error:", error);
       alert("Failed to parse syllabus.");
@@ -41,12 +43,12 @@ function App() {
 
   const handleDownloadICS = () => {
     if (!events.length) return;
-    downloadICS(events);
+    downloadICS(events.map(event => ({ ...event, date: event.date || "" })));
   };
 
   const handleDownloadCSV = () => {
     if (!events.length) return;
-    downloadCSV(events);
+    downloadCSV(events.map(event => ({ ...event, date: event.date || "" })));
   };
 
   return (
@@ -102,7 +104,7 @@ function App() {
 
         {events.length > 0 && (
           <div className="mt-6">
-            <h2 className="text-xl text-black font-semibold mb-2">📅 Detected Events</h2>
+            <h2 className="text-xl text-black font-semibold mb-2">Detected Events</h2>
             <ul className="space-y-3">
               {events.map((ev, idx) => (
                 <li
@@ -118,6 +120,8 @@ function App() {
             </ul>
           </div>
         )}
+
+        {evaluations.length > 0 && <EvaluationsTable items={evaluations} />}
       </div>
     </div>
   );
