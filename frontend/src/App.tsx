@@ -53,7 +53,7 @@ function App() {
 
   return (
     <div className="w-screen h-[100dvh] bg-white overflow-x-hidden">
-      <div className="mx-auto max-w-2xl p-8 mt-60">
+      <div className="mx-auto max-w-2xl p-8 mt-60 mb-20">
         <h1 className="text-6xl font-bold mb-4 text-center text-gray-800">
           📚 Syllabus Parser
         </h1>

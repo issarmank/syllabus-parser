@@ -7,7 +7,7 @@ export const EvaluationsTable: React.FC<{ items: EvaluationItem[] }> = ({ items 
   return (
     <div className="mt-10">
       <h2 className="text-xl font-semibold mb-3 text-black">Evaluation Breakdown</h2>
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-black bg-white">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -22,10 +22,6 @@ export const EvaluationsTable: React.FC<{ items: EvaluationItem[] }> = ({ items 
                   <td className="px-4 py-2 text-right font-medium text-gray-900">{ev.weight}</td>
                 </tr>
               ))}
-              <tr className="border-t bg-gray-50">
-                <td className="px-4 py-2 font-semibold text-gray-900">Total</td>
-                <td className="px-4 py-2 text-right font-semibold text-gray-900">{total}</td>
-              </tr>
             </tbody>
         </table>
       </div>
