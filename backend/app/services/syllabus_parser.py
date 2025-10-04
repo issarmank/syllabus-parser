@@ -1,6 +1,8 @@
 # app/services/syllabus_parser.py
 import json, re
 import logging
+from typing import Optional
+from datetime import datetime
 from openai import OpenAI
 from app.config import OPENAI_API_KEY
 from app.models import Event, ParseResult, Assessment
@@ -24,8 +26,10 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 logger = logging.getLogger(__name__)
 
-def extract_evaluations(text: str) -> list[Event]:  # placeholder type to allow earlier reference (will not be used)
-    pass  # (dummy to quiet linters if any)
+# Remove unused placeholder function
+# def extract_evaluations(text: str) -> list[Event]:
+#     pass
+
 
 def heuristic(text: str) -> ParseResult:
     lines = [l.strip() for l in text.splitlines() if l.strip()]
@@ -40,6 +44,7 @@ def heuristic(text: str) -> ParseResult:
     # Heuristic evaluations
     evals = _extract_evaluations(lines)
     return ParseResult(summary=summary, events=events, evaluations=evals)
+
 
 def _extract_evaluations(lines: list[str]) -> list[Assessment]:
     import re
@@ -91,6 +96,28 @@ def _extract_evaluations(lines: list[str]) -> list[Assessment]:
         largest.weight = round(largest.weight + diff, 2)
     return normalized
 
+
+def _to_iso(date_str: str) -> Optional[str]:
+    """Accept ISO (YYYY-MM-DD) or natural dates like 'September 23rd, 2025' and normalize to ISO.
+    Returns None if parsing fails.
+    """
+    s = (date_str or "").strip()
+    if not s:
+        return None
+    if DATE_RE.match(s):
+        return s
+    # remove ordinal suffixes (st, nd, rd, th)
+    s = re.sub(r"(\d{1,2})(st|nd|rd|th)", r"\1", s, flags=re.IGNORECASE)
+    # try common formats
+    for fmt in ("%B %d, %Y", "%b %d, %Y", "%B %d %Y", "%b %d %Y"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
 def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
     text = extract_text_from_pdf(pdf_bytes, max_pages=max_pages)
     if not text.strip():
@@ -112,17 +139,19 @@ def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
         data = json.loads(raw)
         summary = (data.get("summary") or "").strip()
 
-        # Events
+        # Events (normalize date to ISO when possible)
         events_out: list[Event] = []
         for e in data.get("events", []):
             title = (e.get("title") or "").strip()
             date = (e.get("date") or "").strip()
-            if date and not DATE_RE.match(date):
+            date_iso = _to_iso(date) if date else None
+            if date and not date_iso:
+                # drop events with unparseable dates
                 continue
             if title:
-                events_out.append(Event(title=title, date=date))
+                events_out.append(Event(title=title, date=date_iso or ""))
         # Evaluations from model (fallback to heuristic extraction if missing)
-        evals_out = []
+        evals_out: list[Assessment] = []
         for ev in data.get("evaluations", []):
             name = (ev.get("name") or "").strip()
             try:
