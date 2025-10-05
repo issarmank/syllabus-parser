@@ -3,7 +3,9 @@ import json, re
 import logging
 from typing import Optional
 from datetime import datetime
-from openai import OpenAI
+from pydantic import BaseModel, Field
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
 from app.config import OPENAI_API_KEY
 from app.models import Event, ParseResult, Assessment
 from .pdf_reader import extract_text_from_pdf
@@ -26,9 +28,19 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 logger = logging.getLogger(__name__)
 
-# Remove unused placeholder function
-# def extract_evaluations(text: str) -> list[Event]:
-#     pass
+# Pydantic schema used for structured output from LangChain
+class LcEvent(BaseModel):
+    title: str = Field(..., description="Event title")
+    date: Optional[str] = Field(None, description="YYYY-MM-DD date or empty if unknown")
+
+class LcEvaluation(BaseModel):
+    name: str
+    weight: float
+
+class LcSyllabus(BaseModel):
+    summary: str
+    events: list[LcEvent]
+    evaluations: list[LcEvaluation]
 
 
 def heuristic(text: str) -> ParseResult:
@@ -126,44 +138,39 @@ def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
         return heuristic(text)
 
     try:
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": text[:30000]},
-            ],
-        )
-        raw = resp.choices[0].message.content or "{}"
-        data = json.loads(raw)
-        summary = (data.get("summary") or "").strip()
+        # LangChain LLM with structured output
+        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=OPENAI_API_KEY)
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "{system}"),
+            ("user", "{text}")
+        ])
+        chain = prompt | llm.with_structured_output(LcSyllabus)
+        result: LcSyllabus = chain.invoke({"text": text[:30000], "system": SYSTEM})
+
+        summary = (result.summary or "").strip()
 
         # Events (normalize date to ISO when possible)
         events_out: list[Event] = []
-        for e in data.get("events", []):
-            title = (e.get("title") or "").strip()
-            date = (e.get("date") or "").strip()
-            date_iso = _to_iso(date) if date else None
-            if date and not date_iso:
-                # drop events with unparseable dates
+        for e in result.events or []:
+            title = (e.title or "").strip()
+            date_raw = (e.date or "").strip()
+            date_iso = _to_iso(date_raw) if date_raw else None
+            if date_raw and not date_iso:
                 continue
             if title:
                 events_out.append(Event(title=title, date=date_iso or ""))
-        # Evaluations from model (fallback to heuristic extraction if missing)
+
+        # Evaluations (fallback to heuristic if empty)
         evals_out: list[Assessment] = []
-        for ev in data.get("evaluations", []):
-            name = (ev.get("name") or "").strip()
-            try:
-                weight = float(ev.get("weight"))
-            except Exception:
-                continue
-            if name and 0 <= weight <= 200:  # loose pre-normal check
+        for ev in result.evaluations or []:
+            name = (ev.name or "").strip()
+            weight = float(ev.weight) if ev.weight is not None else None
+            if name and weight is not None and 0 <= weight <= 200:
                 evals_out.append(Assessment(name=name, weight=weight))
         if not evals_out:
             evals_out = _extract_evaluations([l.strip() for l in text.splitlines()])
 
-        # Normalize evaluations
+        # Normalize evaluations to ~100
         if evals_out:
             total = sum(e.weight for e in evals_out)
             if total > 0 and (total < 98 or total > 102):
@@ -176,7 +183,7 @@ def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
 
         return ParseResult(summary=summary or "No summary returned.", events=events_out, evaluations=evals_out)
     except Exception as e:
-        logger.exception("OpenAI parse failed; using heuristic.")
+        logger.exception("LangChain parse failed; using heuristic.")
         fb = heuristic(text)
         fb.summary = f"(Fallback due to error: {e})\n{fb.summary}"
         return fb
