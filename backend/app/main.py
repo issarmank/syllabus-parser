@@ -5,9 +5,15 @@ from app.routes import syllabus
 
 app = FastAPI(title="Syllabus Parser API")
 
+allowed = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://syllabus-parser-alpha.vercel.app/",  # replace with your actual Vercel domain
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=allowed,
     allow_methods=["*"],
     allow_headers=["*"],
 )
