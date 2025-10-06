@@ -151,7 +151,7 @@ def _clean_text(s: str) -> str:
     # Fix hyphenation across line breaks and collapse whitespace
     s = re.sub(r"-\s*\n\s*", "", s)
     s = re.sub(r"\r", "\n", s)
-    s = re.sub(r"[ \t]+\n", "\n")
+    s = re.sub(r"[ \t]+\n", "\n", s)
     s = re.sub(r"\n{3,}", "\n\n", s)
     return s.strip()
 
