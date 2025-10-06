@@ -17,6 +17,7 @@ if FRONTEND_ORIGIN:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"^https://syllabus-parser.*\.vercel\.app$",  # allow previews
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=False,
