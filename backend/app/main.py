@@ -2,15 +2,17 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import syllabus
-from app.config import OPENAI_API_KEY
+from app.config import FRONTEND_ORIGIN
 
 app = FastAPI(title="Syllabus Parser API")
 
 allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://syllabus-parser-alpha.vercel.app/",  # replace with your actual Vercel domain
 ]
+
+if FRONTEND_ORIGIN:
+    allowed_origins.append(FRONTEND_ORIGIN)
 
 app.add_middleware(
     CORSMiddleware,
