@@ -9,9 +9,11 @@ app = FastAPI(title="Syllabus Parser API")
 allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://syllabus-parser-alpha.vercel.app",  # added explicit prod domain
 ]
 
-if FRONTEND_ORIGIN:
+# If you prefer env-based, keep this as well:
+if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in allowed_origins:
     allowed_origins.append(FRONTEND_ORIGIN)
 
 app.add_middleware(
