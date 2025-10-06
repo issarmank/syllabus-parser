@@ -18,10 +18,13 @@ SYSTEM = (
     '"evaluations":[{"name":"<assessment>","weight": <number 0-100>}]}'
     "\nRules:\n"
     "- events: only dated academic deadlines (exams, assignments, projects, quizzes, major due dates) with real dates in YYYY-MM-DD.\n"
+    "- events MUST include a single concrete date; if multiple dates exist for the same item, create one event per date. Do not output events without dates.\n"
     "- evaluations: list each graded assessment component (e.g., 'Assignments', 'Midterm Exam', 'Final Examination', 'Project').\n"
     "- weight is its percentage of the final grade (number). Do NOT include % sign.\n"
     "- If separate undergraduate / graduate columns exist, prefer the undergraduate column. One weight per assessment.\n"
-    "- Ensure evaluation weights sum approximately to 100 (adjust proportionally if raw data slightly off)."
+    "- Ensure evaluation weights sum approximately to 100 (adjust proportionally if raw data slightly off).\n"
+    "- Exclude policy/administrative text such as late penalties, passing requirements, academic integrity, attendance, or 'Use of English'. Only graded components belong in 'evaluations'.\n"
+    "- The 'summary' must be natural prose (2–4 sentences). Do not echo headings, bullet points, or table text."
 )
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -59,54 +62,68 @@ def heuristic(text: str) -> ParseResult:
 
 
 def _extract_evaluations(lines: list[str]) -> list[Assessment]:
-    import re
-    rows: list[tuple[str,float]] = []
-    pct_re = re.compile(r'(\d{1,3})\s*%')
-    heading_hit = False
+    # Keep only lines likely to describe graded components and a percent
+    percent_re = re.compile(r"(\d{1,3})(?:\s*%)")
+    allow_keywords = re.compile(
+        r"\b(assign(ment)?s?|mid[-\s]?term|final( exam| examination)?|quiz(zes)?|project(s)?|lab(s|oratory)?|participation|presentation|report|homework|tutorials?)\b",
+        re.IGNORECASE,
+    )
+    deny_keywords = re.compile(
+        r"\b(policy|penal(ties|ty)|late|plagiarism|integrity|attendance|passing|use of english|accommodat(ion|ions)|senate|appeal|grade(?:\s+of)?|less than|<|>)\b",
+        re.IGNORECASE,
+    )
+    candidates: list[tuple[str, float]] = []
     for raw in lines:
-        low = raw.lower()
-        if any(h in low for h in ("evaluation", "assess", "grading", "weight")):
-            heading_hit = True
-        if not heading_hit:
+        line = " ".join(raw.split())
+        if not percent_re.search(line):
             continue
-        # Find percent values
-        pcts = pct_re.findall(raw)
-        if not pcts:
+        if deny_keywords.search(line):
             continue
-        # Name candidate: substring before first percent occurrence
-        first_idx = raw.lower().find(pcts[0])
-        name_part = raw[:first_idx].strip(" :-\t")
-        # Clean name
-        name_part = re.sub(r'\s+', ' ', name_part)
-        if not name_part or len(name_part) < 2:
+        if not allow_keywords.search(line):
             continue
-        # Skip column headers
-        if any(x in name_part.lower() for x in ("undergraduate", "graduate", "tentative", "date")):
+        # Extract first percent as weight
+        m = percent_re.search(line)
+        if not m:
             continue
-        # Take first % as weight (undergrad)
-        weight_val = float(pcts[0])
-        # Merge duplicates keeping highest
-        existing = next((i for i,(n,_) in enumerate(rows) if n.lower()==name_part.lower()), None)
-        if existing is not None:
-            rows[existing] = (rows[existing][0], max(rows[existing][1], weight_val))
-        else:
-            rows.append((name_part, weight_val))
+        weight = float(m.group(1))
+        if not (0 < weight <= 100):
+            continue
+        # Name: take text before the percent, clean it up, shorten to ~6 words
+        name = line
+        # Common splits (tables: "Assessment  Weight")
+        name = re.split(r"\s{2,}|\t|\s-\s|:\s", name)[0]
+        name = re.sub(r"\s*\(*\d{1,3}\s*%\)*", "", name)
+        name = re.sub(r"\s{2,}", " ", name).strip(" -:\t")
+        # Normalize plurals like "3 assignments" -> "Assignments"
+        name = re.sub(r"^\d+\s+", "", name).strip()
+        # Limit overly long sentences
+        words = name.split()
+        if len(words) > 8:
+            name = " ".join(words[:8])
+        if len(name) < 3:
+            continue
+        candidates.append((name, weight))
+
+    # Deduplicate by name (keep max weight)
+    dedup: dict[str, float] = {}
+    for n, w in candidates:
+        dedup[n] = max(w, dedup.get(n, 0.0))
+    rows = list(dedup.items())
     if not rows:
         return []
-    total = sum(w for _,w in rows)
+    # Normalize to 100 with minor rounding fix
+    total = sum(w for _, w in rows)
     if total <= 0:
         return []
-    # Normalize to 100
-    normalized: list[Assessment] = []
-    for name, w in rows:
-        normalized.append(Assessment(name=name, weight=round((w/total)*100, 2)))
-    # Minor rounding fix
+    normalized: list[Assessment] = [
+        Assessment(name=n, weight=round((w / total) * 100, 2)) for n, w in rows
+    ]
     diff = round(100 - sum(a.weight for a in normalized), 2)
     if abs(diff) >= 0.05:
-        # Adjust largest
         largest = max(normalized, key=lambda a: a.weight)
         largest.weight = round(largest.weight + diff, 2)
-    return normalized
+    # Keep at most 10 items
+    return normalized[:10]
 
 
 def _to_iso(date_str: str) -> Optional[str]:
@@ -130,8 +147,17 @@ def _to_iso(date_str: str) -> Optional[str]:
     return None
 
 
+def _clean_text(s: str) -> str:
+    # Fix hyphenation across line breaks and collapse whitespace
+    s = re.sub(r"-\s*\n\s*", "", s)
+    s = re.sub(r"\r", "\n", s)
+    s = re.sub(r"[ \t]+\n", "\n")
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s.strip()
+
 def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
     text = extract_text_from_pdf(pdf_bytes, max_pages=max_pages)
+    text = _clean_text(text)
     if not text.strip():
         return ParseResult(summary="No text extracted.", events=[], evaluations=[])
     if not OPENAI_API_KEY:
@@ -155,10 +181,9 @@ def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
             title = (e.title or "").strip()
             date_raw = (e.date or "").strip()
             date_iso = _to_iso(date_raw) if date_raw else None
-            if date_raw and not date_iso:
-                continue
-            if title:
-                events_out.append(Event(title=title, date=date_iso or ""))
+            # Only include events that have a real ISO date
+            if title and date_iso:
+                events_out.append(Event(title=title, date=date_iso))
 
         # Evaluations (fallback to heuristic if empty)
         evals_out: list[Assessment] = []
