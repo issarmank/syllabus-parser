@@ -24,7 +24,7 @@ function App() {
     formData.append("file", file);
 
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+      const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
       const response = await fetch(`${API_BASE}/parse-syllabus`, {
         method: "POST",
         body: formData,
