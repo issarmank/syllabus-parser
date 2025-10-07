@@ -16,15 +16,23 @@ SYSTEM = (
     '{"summary":"<concise 2-4 sentence overview>",'
     '"events":[{"title":"<event>","date":"YYYY-MM-DD"}],'
     '"evaluations":[{"name":"<assessment>","weight": <number 0-100>}]}'
-    "\nRules:\n"
-    "- events: ONLY specific academic deadlines with concrete dates in YYYY-MM-DD format (e.g., 'Midterm Exam' on '2025-10-15'). Do NOT include section headers, policy text, or undated items.\n"
-    "- events MUST include a single concrete date; if multiple dates exist for the same item, create one event per date. Do not output events without dates.\n"
-    "- evaluations: list each graded assessment component (e.g., 'Assignments', 'Midterm Exam', 'Final Examination', 'Project').\n"
-    "- weight is its percentage of the final grade (number). Do NOT include % sign.\n"
-    "- If separate undergraduate / graduate columns exist, prefer the undergraduate column. One weight per assessment.\n"
-    "- Ensure evaluation weights sum approximately to 100 (adjust proportionally if raw data slightly off).\n"
-    "- Exclude policy/administrative text such as late penalties, passing requirements, academic integrity, attendance, or 'Use of English'. Only graded components belong in 'evaluations'.\n"
-    "- The 'summary' must be natural prose (2–4 sentences). Do not echo headings, bullet points, or table text."
+    "\n\nRules:\n"
+    "EVENTS:\n"
+    "- Extract ONLY individual academic deadlines with specific dates (e.g., 'Midterm Exam 1' on '2025-10-15', 'Assignment 3 Due' on '2025-11-20').\n"
+    "- Each event MUST have exactly ONE date in YYYY-MM-DD format.\n"
+    "- If an assessment has multiple due dates (e.g., 'Assignment 1' due Oct 15, 'Assignment 2' due Nov 1), create separate events for each.\n"
+    "- Do NOT include assessment categories like 'Assignments' or 'Quizzes' in events - those belong in evaluations.\n"
+    "- Do NOT include section headers, policy text, or undated items.\n"
+    "\nEVALUATIONS:\n"
+    "- Extract graded assessment CATEGORIES with their total weight toward the final grade.\n"
+    "- Examples: 'Assignments' 30%, 'Midterm Exam' 25%, 'Final Exam' 35%, 'Participation' 10%.\n"
+    "- Do NOT list individual assignment instances (e.g., avoid 'Assignment 1', 'Assignment 2' separately).\n"
+    "- weight is the percentage contribution to final grade (number without % sign).\n"
+    "- If separate undergraduate/graduate columns exist, use ONLY undergraduate weights.\n"
+    "- Weights MUST sum to approximately 100. Adjust proportionally if needed.\n"
+    "- Exclude policy text (late penalties, academic integrity, attendance policies, 'Use of English').\n"
+    "\nSUMMARY:\n"
+    "- Write 2-4 natural sentences describing the course. Do not echo headings or bullet points."
 )
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -73,14 +81,15 @@ def heuristic(text: str) -> ParseResult:
 
 
 def _extract_evaluations(lines: list[str]) -> list[Assessment]:
-    # Keep only lines likely to describe graded components and a percent
+    """Extract assessment CATEGORIES (not individual instances) with weights."""
     percent_re = re.compile(r"(\d{1,3})(?:\s*%)")
+    # Allow category-level assessment keywords, but NOT numbered instances
     allow_keywords = re.compile(
         r"\b(assign(ment)?s?|mid[-\s]?term|final( exam| examination)?|quiz(zes)?|project(s)?|lab(s|oratory)?|participation|presentation|report|homework|tutorials?)\b",
         re.IGNORECASE,
     )
     deny_keywords = re.compile(
-        r"\b(policy|penal(ties|ty)|late|plagiarism|integrity|attendance|passing|use of english|accommodat(ion|ions)|senate|appeal|grade(?:\s+of)?|less than|<|>)\b",
+        r"\b(policy|penal(ties|ty)|late|plagiarism|integrity|attendance|passing|use of english|accommodat(ion|ions)|senate|appeal|grade(?:\s+of)?|less than|<|>|assignment\s+\d+|quiz\s+\d+)\b",
         re.IGNORECASE,
     )
     candidates: list[tuple[str, float]] = []
@@ -99,18 +108,23 @@ def _extract_evaluations(lines: list[str]) -> list[Assessment]:
         weight = float(m.group(1))
         if not (0 < weight <= 100):
             continue
-        # Name: take text before the percent, clean it up, shorten to ~6 words
+        # Name: take text before the percent, clean it up
         name = line
         # Common splits (tables: "Assessment  Weight")
         name = re.split(r"\s{2,}|\t|\s-\s|:\s", name)[0]
         name = re.sub(r"\s*\(*\d{1,3}\s*%\)*", "", name)
         name = re.sub(r"\s{2,}", " ", name).strip(" -:\t")
+        # Remove numbered instances (e.g., "Assignment 1" -> "Assignments")
+        name = re.sub(r"\b(assignment|quiz|exam|lab|project|homework)s?\s+\d+\b", r"\1s", name, flags=re.IGNORECASE)
         # Normalize plurals like "3 assignments" -> "Assignments"
         name = re.sub(r"^\d+\s+", "", name).strip()
+        # Capitalize first letter
+        if name:
+            name = name[0].upper() + name[1:]
         # Limit overly long sentences
         words = name.split()
-        if len(words) > 8:
-            name = " ".join(words[:8])
+        if len(words) > 5:
+            name = " ".join(words[:5])
         if len(name) < 3:
             continue
         candidates.append((name, weight))
