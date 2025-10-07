@@ -7,7 +7,7 @@ class Event(BaseModel):
 
 class Assessment(BaseModel):
     name: str
-    weight: float  # normalized percent (0-100)
+    weight: int  # normalized percent (0-100) as whole number
 
 class ParseResult(BaseModel):
     summary: str

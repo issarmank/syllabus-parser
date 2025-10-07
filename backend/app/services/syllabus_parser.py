@@ -127,12 +127,12 @@ def _extract_evaluations(lines: list[str]) -> list[Assessment]:
     if total <= 0:
         return []
     normalized: list[Assessment] = [
-        Assessment(name=n, weight=round((w / total) * 100, 2)) for n, w in rows
+        Assessment(name=n, weight=round((w / total) * 100)) for n, w in rows
     ]
-    diff = round(100 - sum(a.weight for a in normalized), 2)
-    if abs(diff) >= 0.05:
+    diff = 100 - sum(a.weight for a in normalized)
+    if diff != 0:
         largest = max(normalized, key=lambda a: a.weight)
-        largest.weight = round(largest.weight + diff, 2)
+        largest.weight = largest.weight + diff
     # Keep at most 10 items
     return normalized[:10]
 
@@ -209,7 +209,7 @@ def _postprocess_summary(s: str) -> str:
     s = re.sub(r"\b([A-Z][A-Z\s]{3,}):\s*$", "", s).strip()
     # Trim to ~4 sentences max
     parts = re.split(r"(?<=[.!?])\s+", s)
-    s = " " " ".join(parts[:4]).strip()
+    s = " ".join(parts[:4]).strip()
     return s
 
 def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
@@ -264,11 +264,11 @@ def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
             total = sum(e.weight for e in evals_out)
             if total > 0 and (total < 98 or total > 102):
                 for e in evals_out:
-                    e.weight = round(e.weight / total * 100, 2)
-                diff = round(100 - sum(e.weight for e in evals_out), 2)
-                if abs(diff) >= 0.05:
+                    e.weight = round(e.weight / total * 100)
+                diff = 100 - sum(e.weight for e in evals_out)
+                if diff != 0:
                     max_e = max(evals_out, key=lambda x: x.weight)
-                    max_e.weight = round(max_e.weight + diff, 2)
+                    max_e.weight = max_e.weight + diff
 
         return ParseResult(summary=summary or "No summary returned.", events=events_out[:20], evaluations=evals_out)
     except Exception as e:

@@ -3,7 +3,7 @@ import type { EvaluationItem } from "../utils/types";
 
 export const EvaluationsTable: React.FC<{ items: EvaluationItem[] }> = ({ items }) => {
   if (!items || !items.length) return null;
-  const total = items.reduce((s,i)=>s+i.weight,0).toFixed(2);
+  const total = items.reduce((s,i)=>s+i.weight,0);
   return (
     <div className="mt-10">
       <h2 className="text-xl font-semibold mb-3 text-black">Evaluation Breakdown</h2>
@@ -25,9 +25,9 @@ export const EvaluationsTable: React.FC<{ items: EvaluationItem[] }> = ({ items 
             </tbody>
         </table>
       </div>
-      {Math.abs(Number(total) - 100) > 0.5 && (
+      {total !== 100 && (
         <p className="mt-2 text-xs text-amber-600">
-          Note: Weights normalized but sum != 100 exactly. Review manually.
+          Note: Total is {total}%. Please verify the breakdown.
         </p>
       )}
     </div>
