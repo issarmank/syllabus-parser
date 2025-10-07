@@ -28,6 +28,8 @@ SYSTEM = (
 )
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+MONTHS = r"(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
+DATE_TOKEN_RE = re.compile(rf"\b{MONTHS}\.?\s+\d{{1,2}}(?:st|nd|rd|th)?(?:,\s*(\d{{4}}))?\b", re.IGNORECASE)
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +52,22 @@ def heuristic(text: str) -> ParseResult:
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     summary = " ".join(lines[:5])[:400]
     events: list[Event] = []
+    allow_keywords = ("exam","midterm","final","quiz","assignment","project","due")
     for l in lines:
         low = l.lower()
-        if any(k in low for k in ("exam","midterm","final","quiz","assignment","project","due")):
-            events.append(Event(title=l[:120], date=""))
-        if len(events) >= 12:
+        if not any(k in low for k in allow_keywords):
+            continue
+        iso_dates = _extract_iso_dates(l)
+        if not iso_dates:
+            continue
+        # Use text before the first date as title (fallback to line)
+        first_date_match = DATE_TOKEN_RE.search(l) or re.search(r"\b\d{4}-\d{2}-\d{2}\b", l)
+        title = l[: first_date_match.start()].strip(" -:\t") if first_date_match else l
+        title = (title or l)[:120]
+        for d in iso_dates:
+            events.append(Event(title=title, date=d))
+        if len(events) >= 20:
             break
-    # Heuristic evaluations
     evals = _extract_evaluations(lines)
     return ParseResult(summary=summary, events=events, evaluations=evals)
 
@@ -155,6 +166,37 @@ def _clean_text(s: str) -> str:
     s = re.sub(r"\n{3,}", "\n\n", s)
     return s.strip()
 
+def _extract_iso_dates(text: str) -> list[str]:
+    """Extract one or more dates from free text and normalize to ISO.
+    Infers missing years from any year present in the same string."""
+    if not text:
+        return []
+    out: list[str] = []
+
+    # ISO tokens
+    for iso in re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text):
+        out.append(iso)
+
+    # Month Day (, Year) tokens, propagate year if only one provides it
+    tokens = list(DATE_TOKEN_RE.finditer(text))
+    if tokens:
+        # find a year anywhere in the string
+        year_match = re.search(r"\b(20\d{2}|19\d{2})\b", text)
+        inferred_year = year_match.group(1) if year_match else None
+        for m in tokens:
+            token = m.group(0)
+            # ensure we have a year; if missing and we inferred one, append it
+            if not re.search(r"\b(20\d{2}|19\d{2})\b", token) and inferred_year:
+                token = re.sub(r"(?i)\b(st|nd|rd|th)\b", "", token)
+                token = re.sub(r"\s*,?\s*$", f", {inferred_year}", token)
+            iso = _to_iso(token)
+            if iso:
+                out.append(iso)
+
+    # Dedup and sort
+    out = sorted(set(out))
+    return out
+
 def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
     text = extract_text_from_pdf(pdf_bytes, max_pages=max_pages)
     text = _clean_text(text)
@@ -175,15 +217,19 @@ def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
 
         summary = (result.summary or "").strip()
 
-        # Events (normalize date to ISO when possible)
+        # Events: split multi-date fields and keep only ISO-dated entries
         events_out: list[Event] = []
         for e in result.events or []:
             title = (e.title or "").strip()
+            if not title:
+                continue
             date_raw = (e.date or "").strip()
-            date_iso = _to_iso(date_raw) if date_raw else None
-            # Only include events that have a real ISO date
-            if title and date_iso:
-                events_out.append(Event(title=title, date=date_iso))
+            iso_list = _extract_iso_dates(date_raw)
+            for d in iso_list:
+                events_out.append(Event(title=title, date=d))
+        # If model returned none, try heuristic for events too
+        if not events_out:
+            events_out = heuristic(text).events
 
         # Evaluations (fallback to heuristic if empty)
         evals_out: list[Assessment] = []
@@ -206,7 +252,7 @@ def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
                     max_e = max(evals_out, key=lambda x: x.weight)
                     max_e.weight = round(max_e.weight + diff, 2)
 
-        return ParseResult(summary=summary or "No summary returned.", events=events_out, evaluations=evals_out)
+        return ParseResult(summary=summary or "No summary returned.", events=events_out[:20], evaluations=evals_out)
     except Exception as e:
         logger.exception("LangChain parse failed; using heuristic.")
         fb = heuristic(text)
