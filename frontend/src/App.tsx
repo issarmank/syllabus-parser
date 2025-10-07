@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import formatFullDate from "./components/EventDate";
 import { downloadICS, downloadCSV } from "./utils/exportCalendar";
 import type { EventItem, EvaluationItem, ParseResult } from "./utils/types";
 import { EvaluationsTable } from "./components/EvaluationsTable";
+import { DetectedEvents } from "./components/DetectedEvents";
+import { ExportButtons } from "./components/ExportButtons";
 
 function App() {
   const [file, setFile] = useState<File | null>(null);
@@ -79,22 +80,11 @@ function App() {
           {loading ? "Parsing..." : "Upload & Parse"}
         </button>
 
-        {events.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              onClick={handleDownloadICS}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
-            >
-              Download .ics
-            </button>
-            <button
-              onClick={handleDownloadCSV}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700"
-            >
-              Export CSV (Notion)
-            </button>
-          </div>
-        )}
+        <ExportButtons
+          onDownloadICS={handleDownloadICS}
+          onDownloadCSV={handleDownloadCSV}
+          hasEvents={events.length > 0}
+        />
 
         {summary && (
           <div className="mt-8 p-4 rounded-xl bg-gray-50 border">
@@ -103,24 +93,7 @@ function App() {
           </div>
         )}
 
-        {events.length > 0 && (
-          <div className="mt-6">
-            <h2 className="text-xl text-black font-semibold mb-2">Detected Events</h2>
-            <ul className="space-y-3">
-              {events.map((ev, idx) => (
-                <li
-                  key={idx}
-                  className="p-3 border rounded-lg bg-gray-100 text-black flex justify-between"
-                >
-                  <span>{ev.title}</span>
-                  <span className="text-black font-medium">
-                    {formatFullDate(ev.date)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <DetectedEvents events={events} />
 
         {evaluations.length > 0 && <EvaluationsTable items={evaluations} />}
       </div>
