@@ -17,7 +17,7 @@ SYSTEM = (
     '"events":[{"title":"<event>","date":"YYYY-MM-DD"}],'
     '"evaluations":[{"name":"<assessment>","weight": <number 0-100>}]}'
     "\nRules:\n"
-    "- events: only dated academic deadlines (exams, assignments, projects, quizzes, major due dates) with real dates in YYYY-MM-DD.\n"
+    "- events: ONLY specific academic deadlines with concrete dates in YYYY-MM-DD format (e.g., 'Midterm Exam' on '2025-10-15'). Do NOT include section headers, policy text, or undated items.\n"
     "- events MUST include a single concrete date; if multiple dates exist for the same item, create one event per date. Do not output events without dates.\n"
     "- evaluations: list each graded assessment component (e.g., 'Assignments', 'Midterm Exam', 'Final Examination', 'Project').\n"
     "- weight is its percentage of the final grade (number). Do NOT include % sign.\n"
@@ -197,6 +197,21 @@ def _extract_iso_dates(text: str) -> list[str]:
     out = sorted(set(out))
     return out
 
+# Heuristic filters for evaluations
+EVAL_DENY_RE = re.compile(
+    r"\b(policy|late|penal(ties|ty)|plagiarism|integrity|attendance|passing|use of english|accommodat(ion|ions)|senate|appeal|grade(?:\s+of)?|less than|<|>)\b",
+    re.IGNORECASE,
+)
+
+def _postprocess_summary(s: str) -> str:
+    s = " ".join((s or "").split())
+    # Drop trailing headings like "COURSE DESCRIPTION:" etc.
+    s = re.sub(r"\b([A-Z][A-Z\s]{3,}):\s*$", "", s).strip()
+    # Trim to ~4 sentences max
+    parts = re.split(r"(?<=[.!?])\s+", s)
+    s = " " " ".join(parts[:4]).strip()
+    return s
+
 def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
     text = extract_text_from_pdf(pdf_bytes, max_pages=max_pages)
     text = _clean_text(text)
@@ -215,7 +230,7 @@ def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
         chain = prompt | llm.with_structured_output(LcSyllabus)
         result: LcSyllabus = chain.invoke({"text": text[:30000], "system": SYSTEM})
 
-        summary = (result.summary or "").strip()
+        summary = _postprocess_summary((result.summary or "").strip())
 
         # Events: split multi-date fields and keep only ISO-dated entries
         events_out: list[Event] = []
@@ -224,9 +239,11 @@ def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
             if not title:
                 continue
             date_raw = (e.date or "").strip()
-            iso_list = _extract_iso_dates(date_raw)
-            for d in iso_list:
-                events_out.append(Event(title=title, date=d))
+            # Only emit if we can extract at least one valid ISO date
+            iso_list = _extract_iso_dates(date_raw) if date_raw else []
+            if iso_list:
+                for d in iso_list:
+                    events_out.append(Event(title=title, date=d))
         # If model returned none, try heuristic for events too
         if not events_out:
             events_out = heuristic(text).events
@@ -236,7 +253,8 @@ def parse_pdf_bytes(pdf_bytes: bytes, max_pages: int = 12) -> ParseResult:
         for ev in result.evaluations or []:
             name = (ev.name or "").strip()
             weight = float(ev.weight) if ev.weight is not None else None
-            if name and weight is not None and 0 <= weight <= 200:
+            # Drop policy/administrative rows sneaking in from the model
+            if name and not EVAL_DENY_RE.search(name) and weight is not None and 0 <= weight <= 200:
                 evals_out.append(Assessment(name=name, weight=weight))
         if not evals_out:
             evals_out = _extract_evaluations([l.strip() for l in text.splitlines()])
