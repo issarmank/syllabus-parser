@@ -12,7 +12,6 @@ allowed_origins = [
     "https://syllabus-parser-alpha.vercel.app",  # added explicit prod domain
 ]
 
-# If you prefer env-based, keep this as well:
 if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in allowed_origins:
     allowed_origins.append(FRONTEND_ORIGIN)
 

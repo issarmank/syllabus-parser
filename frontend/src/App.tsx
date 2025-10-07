@@ -25,13 +25,23 @@ function App() {
     formData.append("file", file);
 
     try {
-      const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+      // Vite automatically uses .env.development in dev mode and .env.production in build
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+      console.log("API_BASE:", API_BASE); // DEBUG - remove after testing
+      
       const response = await fetch(`${API_BASE}/parse-syllabus`, {
         method: "POST",
         body: formData,
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const data: ParseResult = await response.json();
+      console.log("Parsed data:", data); // DEBUG
+      console.log("Events count:", data.events?.length); // DEBUG
+      
       setSummary(data.summary || "");
       setEvents(data.events || []);
       setEvaluations(data.evaluations || []);
