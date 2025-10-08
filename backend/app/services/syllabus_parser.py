@@ -4,15 +4,9 @@ from typing import Optional
 from pypdf import PdfReader
 from io import BytesIO
 from app.models import ParseResult, Event, Assessment
-
-try:
-    from openai import OpenAI
-    from pydantic import BaseModel, Field
-    from app.config import OPENAI_API_KEY
-    HAS_OPENAI = bool(OPENAI_API_KEY)
-except ImportError:
-    HAS_OPENAI = False
-    print("WARNING: OpenAI not available. Install with: pip install openai")
+from openai import OpenAI
+from pydantic import BaseModel, Field
+from app.config import OPENAI_API_KEY
 
 # Use pydantic v2 (standard BaseModel)
 class LcEvent(BaseModel):
@@ -80,14 +74,6 @@ def parse_syllabus_from_pdf(file_bytes: bytes) -> ParseResult:
             evaluations=[]
         )
 
-    # Check if AI parsing is available
-    if not HAS_OPENAI:
-        return ParseResult(
-            summary="AI parsing not available. Please set OPENAI_API_KEY in your .env file.",
-            events=[],
-            evaluations=[]
-        )
-
     # Use AI to parse the syllabus
     try:
         client = OpenAI(api_key=OPENAI_API_KEY)
@@ -113,7 +99,6 @@ def parse_syllabus_from_pdf(file_bytes: bytes) -> ParseResult:
             total = sum(a.weight for a in evaluations)
             
             if total == 0:
-                # Invalid data, return empty
                 evaluations = []
             elif total != 100:
                 # Normalize weights proportionally
@@ -130,7 +115,6 @@ def parse_syllabus_from_pdf(file_bytes: bytes) -> ParseResult:
                 diff = 100 - current_sum
                 
                 if diff != 0 and evaluations:
-                    # Add difference to the largest item
                     largest = max(evaluations, key=lambda a: a.weight)
                     largest.weight += diff
         
@@ -143,14 +127,6 @@ def parse_syllabus_from_pdf(file_bytes: bytes) -> ParseResult:
     except Exception as e:
         error_msg = str(e)
         print(f"AI parsing error: {error_msg}")
-        
-        # Check if it's an API key error
-        if "api_key" in error_msg.lower() or "authentication" in error_msg.lower():
-            return ParseResult(
-                summary="OpenAI API key is invalid or not set. Please check your .env file.",
-                events=[],
-                evaluations=[]
-            )
         
         return ParseResult(
             summary=f"AI parsing failed: {error_msg}",
