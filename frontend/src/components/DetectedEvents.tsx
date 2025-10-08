@@ -10,7 +10,7 @@ export function DetectedEvents({ events }: DetectedEventsProps) {
 
   return (
     <div className="mt-6">
-      <h2 className="text-xl text-black font-semibold mb-4">📅 Detected Events</h2>
+      <h2 className="text-xl text-black font-semibold mb-4">Detected Events</h2>
       <div className="space-y-2">
         {events.map((ev, idx) => (
           <div

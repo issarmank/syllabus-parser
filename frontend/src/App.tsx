@@ -25,9 +25,7 @@ function App() {
     formData.append("file", file);
 
     try {
-      // Vite automatically uses .env.development in dev mode and .env.production in build
       const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-      console.log("API_BASE:", API_BASE); // DEBUG - remove after testing
       
       const response = await fetch(`${API_BASE}/parse-syllabus`, {
         method: "POST",
@@ -39,9 +37,7 @@ function App() {
       }
 
       const data: ParseResult = await response.json();
-      console.log("Parsed data:", data); // DEBUG
-      console.log("Events count:", data.events?.length); // DEBUG
-      
+    
       setSummary(data.summary || "");
       setEvents(data.events || []);
       setEvaluations(data.evaluations || []);
@@ -70,15 +66,16 @@ function App() {
           📚 Syllabus Parser
         </h1>
 
-        <div className="w-122 text-right mb-4">
+        <div className="w-full mb-4 flex justify-center">
           <input
             type="file"
             accept=".pdf"
             onChange={handleFileChange}
-            className="inline-block text-sm text-gray-900
+            className="text-sm text-gray-900 max-w-fit
                        file:mr-4 file:rounded-lg file:border-0
                        file:bg-gray-600 file:text-white file:px-4 file:py-2
-                       hover:file:bg-gray-900"
+                       file:cursor-pointer
+                       hover:file:bg-gray-900 cursor-pointer"
           />
         </div>
 
@@ -98,7 +95,7 @@ function App() {
 
         {summary && (
           <div className="mt-8 p-4 rounded-xl bg-gray-50 border">
-            <h2 className="text-xl text-black font-semibold mb-2">📄 Summary</h2>
+            <h2 className="text-xl text-black font-semibold mb-2">Summary</h2>
             <p className="text-black leading-relaxed">{summary}</p>
           </div>
         )}
