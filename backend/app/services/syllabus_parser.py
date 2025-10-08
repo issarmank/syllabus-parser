@@ -4,9 +4,27 @@ from typing import Optional
 from pypdf import PdfReader
 from io import BytesIO
 from app.models import ParseResult, Event, Assessment
-from openai import OpenAI
-from pydantic import BaseModel, Field
-from app.config import OPENAI_API_KEY
+import os
+
+# Debug: Check what's in the environment
+print(f"DEBUG: Checking environment variables...")
+print(f"DEBUG: OPENAI_API_KEY exists in os.environ: {'OPENAI_API_KEY' in os.environ}")
+print(f"DEBUG: OPENAI_API_KEY value (first 10 chars): {os.getenv('OPENAI_API_KEY', '')[:10]}...")
+
+try:
+    from openai import OpenAI
+    from pydantic import BaseModel, Field
+    from app.config import OPENAI_API_KEY
+    
+    print(f"DEBUG: OpenAI import successful")
+    print(f"DEBUG: OPENAI_API_KEY from config: {OPENAI_API_KEY[:10] if OPENAI_API_KEY else 'None'}...")
+    
+    HAS_OPENAI = bool(OPENAI_API_KEY)
+    print(f"DEBUG: HAS_OPENAI = {HAS_OPENAI}")
+except ImportError as e:
+    HAS_OPENAI = False
+    print(f"WARNING: OpenAI not available. Error: {e}")
+    print("Install with: pip install openai")
 
 # Use pydantic v2 (standard BaseModel)
 class LcEvent(BaseModel):
@@ -56,6 +74,8 @@ SYSTEM = (
 def parse_syllabus_from_pdf(file_bytes: bytes) -> ParseResult:
     """Parse syllabus PDF using AI extraction."""
     
+    print(f"DEBUG: parse_syllabus_from_pdf called, HAS_OPENAI={HAS_OPENAI}")
+    
     # Extract text from PDF
     try:
         reader = PdfReader(BytesIO(file_bytes))
@@ -74,19 +94,54 @@ def parse_syllabus_from_pdf(file_bytes: bytes) -> ParseResult:
             evaluations=[]
         )
 
+    # Check if AI parsing is available
+    if not HAS_OPENAI:
+        error_msg = "AI parsing not available. "
+        if OPENAI_API_KEY is None:
+            error_msg += "OPENAI_API_KEY is not set in environment variables."
+        elif OPENAI_API_KEY == "":
+            error_msg += "OPENAI_API_KEY is set but empty."
+        else:
+            error_msg += "OpenAI package may not be installed."
+        
+        print(f"DEBUG: {error_msg}")
+        return ParseResult(
+            summary=error_msg,
+            events=[],
+            evaluations=[]
+        )
+
     # Use AI to parse the syllabus
     try:
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        print(f"DEBUG: Initializing OpenAI client...")
+        print(f"DEBUG: API key starts with: {OPENAI_API_KEY[:10] if OPENAI_API_KEY else 'None'}...")
+        
+        # Use httpx for better compatibility in container environments
+        import httpx
+        
+        client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            timeout=60.0,  # Increase timeout to 60 seconds
+            max_retries=3,  # Retry failed requests 3 times
+            http_client=httpx.Client(
+                timeout=60.0,
+                verify=True  # Verify SSL certificates
+            )
+        )
+        
+        print(f"DEBUG: OpenAI client initialized, making API call...")
         
         completion = client.beta.chat.completions.parse(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": f"Parse this syllabus:\n\n{text}"}
+                {"role": "user", "content": f"Parse this syllabus:\n\n{text[:500]}..."}  # Truncate for logging
             ],
             response_format=LcSyllabus,
             temperature=0
         )
+        
+        print(f"DEBUG: API call successful!")
         
         result = completion.choices[0].message.parsed
         
@@ -99,6 +154,7 @@ def parse_syllabus_from_pdf(file_bytes: bytes) -> ParseResult:
             total = sum(a.weight for a in evaluations)
             
             if total == 0:
+                # Invalid data, return empty
                 evaluations = []
             elif total != 100:
                 # Normalize weights proportionally
@@ -115,6 +171,7 @@ def parse_syllabus_from_pdf(file_bytes: bytes) -> ParseResult:
                 diff = 100 - current_sum
                 
                 if diff != 0 and evaluations:
+                    # Add difference to the largest item
                     largest = max(evaluations, key=lambda a: a.weight)
                     largest.weight += diff
         
@@ -127,6 +184,14 @@ def parse_syllabus_from_pdf(file_bytes: bytes) -> ParseResult:
     except Exception as e:
         error_msg = str(e)
         print(f"AI parsing error: {error_msg}")
+        
+        # Check if it's an API key error
+        if "api_key" in error_msg.lower() or "authentication" in error_msg.lower():
+            return ParseResult(
+                summary="OpenAI API key is invalid or not set. Please check your .env file.",
+                events=[],
+                evaluations=[]
+            )
         
         return ParseResult(
             summary=f"AI parsing failed: {error_msg}",
