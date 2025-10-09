@@ -10,6 +10,7 @@ allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://syllabus-parser-alpha.vercel.app",
+    "*"  # Temporarily allow all origins for debugging
 ]
 
 if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in allowed_origins:
@@ -17,11 +18,11 @@ if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in allowed_origins:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["*"],  # Temporarily allow all
     allow_origin_regex=r"^https://syllabus-parser.*\.vercel\.app$",
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # Changed to False when using "*"
 )
 
 @app.get("/")
