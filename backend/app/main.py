@@ -9,7 +9,7 @@ app = FastAPI(title="Syllabus Parser API")
 allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://syllabus-parser-alpha.vercel.app",  # added explicit prod domain
+    "https://syllabus-parser-alpha.vercel.app",
 ]
 
 if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in allowed_origins:
@@ -18,15 +18,15 @@ if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in allowed_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"^https://syllabus-parser.*\.vercel\.app$",  # allow previews
+    allow_origin_regex=r"^https://syllabus-parser.*\.vercel\.app$",
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=False,
+    allow_credentials=True,
 )
 
 @app.get("/")
-def root():
-    return {"message": "Syllabus Parser API", "endpoints": ["/health", "/upload", "/parse-syllabus"]}
+async def root():
+    return {"message": "Syllabus Parser API", "endpoints": ["/health", "/parse-syllabus"]}
 
 @app.get("/health")
 def health():
