@@ -1,4 +1,5 @@
 # Syllabus Parser
+https://syllabus-parser-alpha.vercel.app/ 
 
 Upload a syllabus PDF to automatically extract course information for students success
 
